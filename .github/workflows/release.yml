@@ -8,15 +8,8 @@ on:
 
 jobs:
   build:
-    name: Build binary (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      matrix:
-        include:
-          - arch: arm64
-            runner: macos-latest      # Apple Silicon (M-series)
-          - arch: x86_64
-            runner: macos-13          # Last Intel runner on GitHub-hosted
+    name: Build binary (arm64)
+    runs-on: macos-latest      # Apple Silicon (M-series)
 
     steps:
       - uses: actions/checkout@v4
@@ -34,17 +27,17 @@ jobs:
       # Rename and tar so Homebrew gets a clean archive with a known file inside
       - name: Package binary
         run: |
-          mv dist/machine-state dist/machine-state-${{ matrix.arch }}
-          tar -czf machine-state-${{ matrix.arch }}.tar.gz \
-              -C dist machine-state-${{ matrix.arch }}
+          mv dist/machine-state dist/machine-state-arm64
+          tar -czf machine-state-arm64.tar.gz \
+              -C dist machine-state-arm64
 
       - name: Compute SHA256
-        run: shasum -a 256 machine-state-${{ matrix.arch }}.tar.gz
+        run: shasum -a 256 machine-state-arm64.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
-          name: machine-state-${{ matrix.arch }}
-          path: machine-state-${{ matrix.arch }}.tar.gz
+          name: machine-state-arm64
+          path: machine-state-arm64.tar.gz
 
   release:
     name: Create GitHub Release
@@ -59,7 +52,7 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Show SHA256s (copy these into the Homebrew formula)
+      - name: Show SHA256 (copy into the Homebrew formula)
         run: shasum -a 256 artifacts/*.tar.gz
 
       - uses: softprops/action-gh-release@v2
