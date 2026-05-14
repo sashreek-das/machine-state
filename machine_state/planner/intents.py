@@ -161,26 +161,28 @@ _PATTERNS: list[tuple[str, re.Pattern[str], list[str]]] = [
         ["get_app_profile", "get_application_usage"],
     ),
 
-    # RAM query: "how much RAM", "memory available", "RAM usage"
+    # RAM query: "how much RAM", "memory available", "RAM usage", "how is my RAM"
     # Uses negative lookahead to avoid matching "how much memory does X use" (app_profile)
     (
         "ram_query",
         re.compile(
             r"\b(?:how\s+much\s+(?:ram|memory)(?!\s+does)|(?:ram|memory)\s+(?:available|free|used|usage)|"
-            r"available\s+(?:ram|memory)|free\s+(?:ram|memory))\b",
+            r"available\s+(?:ram|memory)|free\s+(?:ram|memory)|"
+            r"how\s+is\s+(?:my\s+)?(?:ram|memory)|(?:ram|memory)\s+(?:looking|status|ok|fine))\b",
             re.IGNORECASE,
         ),
         ["get_ram_info"],
     ),
 
-    # Disk query: "how much disk space", "storage space", "disk usage"
+    # Disk query: "how much disk space", "storage space", "disk usage", "how is my disk"
     # Excludes named-entity queries like "taken by X" or "used by X" (handled by query.py)
     (
         "disk_query",
         re.compile(
             r"\b(?:how\s+much\s+(?:disk|storage|space)(?!\s+(?:is\s+)?(?:taken|used)\s+by)|"
             r"(?:disk|storage)\s+(?:space|usage|available|free)|"
-            r"free\s+(?:disk|storage)\s+space|(?:disk|storage)\s+(?:status|info))\b",
+            r"free\s+(?:disk|storage)\s+space|(?:disk|storage)\s+(?:status|info)|"
+            r"how\s+is\s+(?:my\s+)?(?:disk|storage)|(?:disk|storage)\s+(?:looking|ok|fine))\b",
             re.IGNORECASE,
         ),
         ["get_disk_info", "get_system_storage"],
