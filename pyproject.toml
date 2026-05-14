@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "machine-state-model"
+version = "0.1.0"
+description = "Local-first machine awareness daemon for macOS — query your RAM, disk, and processes like a database."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+# Core runtime has zero third-party dependencies — all stdlib.
+# LLM providers are optional and lazy-imported; only needed for `chat` command.
+dependencies = []
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.20.0"]
+openai    = ["openai>=1.0.0"]
+gemini    = ["google-generativeai>=0.5.0"]
+
+# Used only for local development / editable installs.
+# The distributed artifact is a self-contained binary built with PyInstaller.
+[project.scripts]
+machine-state = "machine_state.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["machine_state"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"machine_state/llm/prompts" = "machine_state/llm/prompts"

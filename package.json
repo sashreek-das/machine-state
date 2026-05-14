@@ -1,0 +1,15 @@
+{
+  "name": "machine-state-model",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "collect": "python3 -m machine_state.cli collect",
+    "ask": "python3 -m machine_state.cli ask",
+    "tool": "python3 -m machine_state.cli tool",
+    "chat": "python3 -m machine_state.cli chat",
+    "chat:verbose": "python3 -m machine_state.cli chat --verbose",
+    "chat:raw": "python3 -m machine_state.cli chat --raw",
+    "plan": "python3 -m machine_state.cli plan",
+    "forecast": "python3 -m machine_state.cli forecast"
+  }
+}

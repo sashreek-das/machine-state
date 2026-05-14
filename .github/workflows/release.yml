@@ -1,0 +1,68 @@
+name: Release
+
+# Triggered only when you push a version tag: git tag v0.1.0 && git push --tags
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    name: Build binary (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-latest      # Apple Silicon (M-series)
+          - arch: x86_64
+            runner: macos-13          # Last Intel runner on GitHub-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build binary
+        run: pyinstaller machine_state.spec
+
+      # Rename and tar so Homebrew gets a clean archive with a known file inside
+      - name: Package binary
+        run: |
+          mv dist/machine-state dist/machine-state-${{ matrix.arch }}
+          tar -czf machine-state-${{ matrix.arch }}.tar.gz \
+              -C dist machine-state-${{ matrix.arch }}
+
+      - name: Compute SHA256
+        run: shasum -a 256 machine-state-${{ matrix.arch }}.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: machine-state-${{ matrix.arch }}
+          path: machine-state-${{ matrix.arch }}.tar.gz
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Show SHA256s (copy these into the Homebrew formula)
+        run: shasum -a 256 artifacts/*.tar.gz
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.tar.gz
+          generate_release_notes: true
