@@ -201,9 +201,45 @@ def _setup_ollama() -> int:
     return 0
 
 
+# ── Post-config steps ─────────────────────────────────────────────────────────
+
+def _has_snapshots() -> bool:
+    try:
+        from . import store
+        return len(store.get_recent_snapshots(limit=1)) > 0
+    except Exception:
+        return False
+
+
+def _initial_collection(bin_path: str) -> bool:
+    """Run a full system snapshot; returns True on success."""
+    result = subprocess.run(
+        [bin_path, "collect", "--full-system",
+         "--system-max-depth", "4", "--system-item-limit", "25"],
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
+def _start_scheduler(bin_path: str) -> str:
+    """Start the background scheduler. Returns 'started', 'already_running', or 'failed'."""
+    result = subprocess.run(
+        [bin_path, "scheduler", "start"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return "failed"
+    if "already_running" in result.stdout:
+        return "already_running"
+    return "started"
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def run_setup() -> int:
+    bin_path = shutil.which("machine-state") or sys.argv[0]
+
     print()
     _print("machine-state  •  setup")
     _print(_DIVIDER)
@@ -225,11 +261,43 @@ def run_setup() -> int:
     if choice == len(_PROVIDERS):
         _print()
         _print("Skipped. Re-run `machine-state setup` whenever you are ready.")
-        print()
-        return 0
+    else:
+        provider_name = _PROVIDERS[choice][0]
+        if provider_name == "ollama":
+            _setup_ollama()
+        else:
+            _setup_cloud(provider_name)
 
-    provider_name = _PROVIDERS[choice][0]
+    # ── Initial snapshot ───────────────────────────────────────────────────────
+    print()
+    _print(_DIVIDER)
+    _print()
+    if _has_snapshots():
+        _print("Existing snapshots found — skipping initial collection.")
+    else:
+        _print("Taking an initial snapshot of your machine...")
+        _print("(Collects RAM, disk, processes, and installed applications.)")
+        if _initial_collection(bin_path):
+            _print("Snapshot complete.")
+        else:
+            _print("Snapshot failed — run `machine-state collect --full-system` manually.")
 
-    if provider_name == "ollama":
-        return _setup_ollama()
-    return _setup_cloud(provider_name)
+    # ── Start scheduler ────────────────────────────────────────────────────────
+    print()
+    _print("Starting background scheduler...")
+    status = _start_scheduler(bin_path)
+    if status == "started":
+        _print("Scheduler running. It will collect snapshots automatically.")
+    elif status == "already_running":
+        _print("Scheduler is already running.")
+    else:
+        _print("Could not start scheduler automatically.")
+        _print("Run `machine-state scheduler start` when ready.")
+
+    print()
+    _print(_DIVIDER)
+    _print()
+    _print("Setup complete. The scheduler starts automatically on every login.")
+    _print("Run `machine-state chat \"<question>\"` to ask about your machine.")
+    print()
+    return 0

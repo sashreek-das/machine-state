@@ -65,24 +65,32 @@ def start_daemon(config: SchedulerConfig) -> dict[str, Any]:
             "message": f"Scheduler is already running (PID {existing_pid}).",
         }
 
-    # Build launch command
+    # Build launch command.
+    # When running as a PyInstaller binary sys.executable is the bundle itself,
+    # not a Python interpreter, so "-c script" does not work.  The binary exposes
+    # a hidden "_scheduler-daemon" subcommand for exactly this purpose.
     config_json = json.dumps(config.to_dict())
-    launch_script = (
-        "import json, sys, threading\n"
-        "from machine_state.scheduler.config import SchedulerConfig\n"
-        "from machine_state.scheduler.runner import run_scheduler_loop\n"
-        "cfg_dict = json.loads(sys.argv[1])\n"
-        "cfg = SchedulerConfig(**{\n"
-        "    k: v for k, v in cfg_dict.items()\n"
-        "    if k not in ('pid_file', 'log_file')\n"
-        "})\n"
-        "cfg.pid_file = cfg_dict['pid_file']\n"
-        "cfg.log_file = cfg_dict['log_file']\n"
-        "run_scheduler_loop(cfg)\n"
-    )
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "_scheduler-daemon", config_json]
+    else:
+        launch_script = (
+            "import json, sys\n"
+            "from pathlib import Path\n"
+            "from machine_state.scheduler.config import SchedulerConfig\n"
+            "from machine_state.scheduler.runner import run_scheduler_loop\n"
+            "cfg_dict = json.loads(sys.argv[1])\n"
+            "cfg = SchedulerConfig(**{\n"
+            "    k: v for k, v in cfg_dict.items()\n"
+            "    if k not in ('pid_file', 'log_file')\n"
+            "})\n"
+            "cfg.pid_file = Path(cfg_dict['pid_file'])\n"
+            "cfg.log_file = Path(cfg_dict['log_file'])\n"
+            "run_scheduler_loop(cfg)\n"
+        )
+        cmd = [sys.executable, "-c", launch_script, config_json]
 
     process = subprocess.Popen(
-        [sys.executable, "-c", launch_script, config_json],
+        cmd,
         start_new_session=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
