@@ -12,11 +12,11 @@ The LLM never sees raw snapshots, raw bytes, or internal IDs.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
-from ..planner.planner import PlanResult, build_plan, execute_plan
+from ..planner.planner import ExecutionPlan, PlanResult, ToolCall, execute_plan
+from ..planner.contracts import TOOL_REGISTRY
 from .context_builder import build_context
 from .providers.base import LLMProvider, LLMResponse
 
@@ -70,8 +70,20 @@ def explain(
       - context: the structured context passed to the LLM
       - plan_status: whether the runtime plan succeeded
     """
-    # 1. Build and execute the plan
-    plan = build_plan(query)
+    # 1. Select tools via LLM, fall back to regex on any failure
+    from ..planner.llm_selector import select_tools
+    intent = select_tools(query, provider)
+    steps = [
+        ToolCall(tool_name=t, arguments=intent.parameters.get(t, {}))
+        for t in intent.tools
+        if t in TOOL_REGISTRY
+    ]
+    plan = ExecutionPlan(
+        intent=intent.name,
+        intent_description=intent.description,
+        query=query,
+        steps=steps,
+    )
     plan_result = execute_plan(plan, snapshot, recent_snapshots, db_path)
 
     if plan_result.intent == "unknown" or not plan_result.aggregated:
