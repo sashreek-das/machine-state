@@ -1,13 +1,13 @@
 class MachineState < Formula
   desc "Local-first machine awareness daemon for macOS"
   homepage "https://github.com/sashreek-das/machine-state"
-  version "0.1.0"
+  version "0.1.1"
   license "MIT"
 
   # Apple Silicon only for now; Intel support coming in a future release.
   # SHA256 is printed by the GitHub Actions release job — update after each release.
   url "https://github.com/sashreek-das/machine-state/releases/download/v#{version}/machine-state-arm64.tar.gz"
-  sha256 "fa508d8abc019e94e1bbf845ba841320479a54c2c613069a45ba27a0428c985c"
+  sha256 "d1916e0730439ee21393ce88f4f2252594fd7e71930364d86e97c6ab6fee7a5e"
 
   def install
     bin.install "machine-state-arm64" => "machine-state"
