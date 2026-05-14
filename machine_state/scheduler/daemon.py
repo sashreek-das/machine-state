@@ -65,41 +65,60 @@ def start_daemon(config: SchedulerConfig) -> dict[str, Any]:
             "message": f"Scheduler is already running (PID {existing_pid}).",
         }
 
-    # Build launch command.
-    # When running as a PyInstaller binary sys.executable is the bundle itself,
-    # not a Python interpreter, so "-c script" does not work.  The binary exposes
-    # a hidden "_scheduler-daemon" subcommand for exactly this purpose.
-    config_json = json.dumps(config.to_dict())
     if getattr(sys, "frozen", False):
-        cmd = [sys.executable, "_scheduler-daemon", config_json]
-    else:
-        launch_script = (
-            "import json, sys\n"
-            "from pathlib import Path\n"
-            "from machine_state.scheduler.config import SchedulerConfig\n"
-            "from machine_state.scheduler.runner import run_scheduler_loop\n"
-            "cfg_dict = json.loads(sys.argv[1])\n"
-            "cfg = SchedulerConfig(**{\n"
-            "    k: v for k, v in cfg_dict.items()\n"
-            "    if k not in ('pid_file', 'log_file')\n"
-            "})\n"
-            "cfg.pid_file = Path(cfg_dict['pid_file'])\n"
-            "cfg.log_file = Path(cfg_dict['log_file'])\n"
-            "run_scheduler_loop(cfg)\n"
-        )
-        cmd = [sys.executable, "-c", launch_script, config_json]
+        # PyInstaller onefile: re-spawning the binary races against the parent's
+        # atexit cleanup deleting the extraction dir (_MEIPASS) before the child
+        # finishes bootstrapping.  Fork instead — the child inherits the already-
+        # loaded Python runtime and all imported modules; no re-extraction needed.
+        from ..scheduler.runner import run_scheduler_loop  # import before fork
 
+        pid = os.fork()
+        if pid == 0:
+            # Child: detach from the parent's session and run the scheduler loop.
+            os.setsid()
+            dev_null = os.open(os.devnull, os.O_RDWR)
+            for fd in (0, 1, 2):
+                os.dup2(dev_null, fd)
+            os.close(dev_null)
+            run_scheduler_loop(config)
+            os._exit(0)
+
+        # Parent: record the child PID and return immediately.
+        _write_pid(pid_file, pid)
+        return {
+            "status": "started",
+            "pid": pid,
+            "message": f"Scheduler started (PID {pid}).",
+            "pidFile": str(pid_file),
+            "logFile": str(config.log_file),
+        }
+
+    # Non-frozen (regular Python): spawn a subprocess running the scheduler loop.
+    config_json = json.dumps(config.to_dict())
+    launch_script = (
+        "import json, sys\n"
+        "from pathlib import Path\n"
+        "from machine_state.scheduler.config import SchedulerConfig\n"
+        "from machine_state.scheduler.runner import run_scheduler_loop\n"
+        "cfg_dict = json.loads(sys.argv[1])\n"
+        "cfg = SchedulerConfig(**{\n"
+        "    k: v for k, v in cfg_dict.items()\n"
+        "    if k not in ('pid_file', 'log_file')\n"
+        "})\n"
+        "cfg.pid_file = Path(cfg_dict['pid_file'])\n"
+        "cfg.log_file = Path(cfg_dict['log_file'])\n"
+        "run_scheduler_loop(cfg)\n"
+    )
     log_path = str(config.log_file)
     with open(log_path, "a") as log_fh:
         process = subprocess.Popen(
-            cmd,
+            [sys.executable, "-c", launch_script, config_json],
             start_new_session=True,
             stdout=log_fh,
             stderr=log_fh,
         )
 
     _write_pid(pid_file, process.pid)
-
     return {
         "status": "started",
         "pid": process.pid,
