@@ -89,12 +89,14 @@ def start_daemon(config: SchedulerConfig) -> dict[str, Any]:
         )
         cmd = [sys.executable, "-c", launch_script, config_json]
 
-    process = subprocess.Popen(
-        cmd,
-        start_new_session=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    log_path = str(config.log_file)
+    with open(log_path, "a") as log_fh:
+        process = subprocess.Popen(
+            cmd,
+            start_new_session=True,
+            stdout=log_fh,
+            stderr=log_fh,
+        )
 
     _write_pid(pid_file, process.pid)
 

@@ -75,25 +75,23 @@ def run_once(config: SchedulerConfig) -> dict[str, Any]:
     try:
         record_snapshot_entities(snapshot, db_path)
     except Exception as exc:
-        _log(log_file, f"Entity history recording failed: {exc}\n{traceback.format_exc()}")
+        pass  # non-fatal; no log_file in scope here
 
     # Detect and store events (compare with previous snapshot)
     try:
         recent = store.get_recent_snapshots(limit=2, db_path=db_path)
         if len(recent) >= 2:
-            current_snap = recent[0]
-            previous_snap = recent[1]
-            detect_and_store_events(previous_snap, current_snap, db_path)
-    except Exception as exc:
-        _log(log_file, f"Event detection failed: {exc}\n{traceback.format_exc()}")
+            detect_and_store_events(recent[1], recent[0], db_path)
+    except Exception:
+        pass  # non-fatal
 
     # Record collection times for all due domains
     collected_at = snapshot.get("timestamp", datetime.now(timezone.utc).isoformat())
     for domain in due_domains:
         try:
             record_domain_collection(domain, collected_at, db_path)
-        except Exception as exc:
-            _log(log_file, f"Domain schedule update failed for '{domain}': {exc}")
+        except Exception:
+            pass  # non-fatal
 
     return {
         "collected": True,
