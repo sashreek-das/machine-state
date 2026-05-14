@@ -6,6 +6,7 @@ import argparse
 
 from .analysis import _ask_command
 from .collection import _collect_command, _tool_command
+from .setup_cmd import _setup_command
 from .daemon import (
     _events_command,
     _history_command,
@@ -22,6 +23,12 @@ from .semantic import _semantic_command
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="machine-state")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # ── setup ─────────────────────────────────────────────────────────────────
+    setup_parser = subparsers.add_parser(
+        "setup", help="Interactive LLM provider setup wizard."
+    )
+    setup_parser.set_defaults(func=_setup_command)
 
     # ── tool ──────────────────────────────────────────────────────────────────
     tool_parser = subparsers.add_parser("tool")
@@ -218,9 +225,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     chat_parser.add_argument("query", help="Natural language question about your machine.")
     chat_parser.add_argument(
-        "--provider", default="ollama",
+        "--provider", default=None,
         choices=["anthropic", "openai", "gemini", "ollama"],
-        help="LLM provider to use (default: ollama).",
+        help="LLM provider to use (default: read from `machine-state setup` config, then ollama).",
     )
     chat_parser.add_argument(
         "--model", default=None,

@@ -84,6 +84,7 @@ def _plan_command(args: argparse.Namespace) -> int:
 def _chat_command(args: argparse.Namespace) -> int:
     from ..llm.providers import get_provider
     from ..llm.orchestrator import explain
+    from .. import config as _config
 
     recent_snapshots = store.get_recent_snapshots(limit=12, db_path=args.db)
     latest_snapshot = recent_snapshots[0] if recent_snapshots else None
@@ -93,13 +94,27 @@ def _chat_command(args: argparse.Namespace) -> int:
 
     db_path = args.db or str(store.DEFAULT_DB_PATH)
 
-    try:
+    # Resolve provider: CLI flag > saved config > default (ollama)
+    if args.provider is not None:
+        provider_name = args.provider
         provider_kwargs: dict = {}
         if args.model:
             provider_kwargs["model"] = args.model
         if args.base_url:
             provider_kwargs["base_url"] = args.base_url
-        provider = get_provider(args.provider, **provider_kwargs)
+    else:
+        provider_name, provider_kwargs = _config.provider_kwargs()
+        # CLI flag overrides still win even when config supplies the provider
+        if args.model:
+            provider_kwargs["model"] = args.model
+        if args.base_url:
+            provider_kwargs["base_url"] = args.base_url
+
+    if provider_name == "ollama" and not _config.load():
+        print("No LLM configured. Run `machine-state setup` first.", file=__import__("sys").stderr)
+
+    try:
+        provider = get_provider(provider_name, **provider_kwargs)
     except Exception as exc:
         _print_json({"status": "error", "reason": str(exc)})
         return 1
