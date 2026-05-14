@@ -144,16 +144,19 @@ def _setup_ollama() -> int:
 
     _print(f"\nFound Ollama at {bin_path}")
 
-    if not _ollama_running():
-        _print("Ollama is not running — starting it now...")
+    raw_url = _ask("Ollama server URL (press Enter for default http://localhost:11434):").strip()
+    base_url = raw_url if raw_url else "http://localhost:11434"
+
+    if not _ollama_running(base_url):
+        _print(f"Ollama is not running at {base_url} — starting it now...")
         if not _start_ollama(bin_path):
             _print("Could not start Ollama automatically.")
             _print("Run `ollama serve` in another terminal, then re-run setup.")
             return 1
 
-    _print("Ollama is running.")
+    _print(f"Ollama is running at {base_url}.")
 
-    installed = _ollama_installed_models()
+    installed = _ollama_installed_models(base_url)
     if installed:
         _print(f"\nInstalled models: {', '.join(installed)}")
 
@@ -192,7 +195,7 @@ def _setup_ollama() -> int:
             return 1
         _print(f"\n{model} is ready.")
 
-    config.save({"provider": "ollama", "model": model})
+    config.save({"provider": "ollama", "model": model, "ollama_base_url": base_url})
     _print()
     _print("Saved. Try it with:  machine-state chat \"how is my RAM looking?\"")
     _print()
