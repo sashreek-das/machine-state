@@ -16,7 +16,7 @@ from .daemon import (
 )
 from .forecast import _forecast_command
 from .llm import _chat_command, _plan_command
-from .scheduler import _notify_command, _scheduler_command
+from .scheduler import _notify_command, _scheduler_command, _scheduler_daemon_command
 from .semantic import _semantic_command
 
 
@@ -218,6 +218,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     forecast_parser.add_argument("--db")
     forecast_parser.set_defaults(func=_forecast_command)
+
+    # ── hidden: scheduler daemon entry point (PyInstaller mode) ──────────────
+    # Not shown in help. Invoked internally by scheduler/daemon.py when frozen.
+    daemon_parser = subparsers.add_parser("_scheduler-daemon")
+    daemon_parser.add_argument("config_json")
+    daemon_parser.set_defaults(func=_scheduler_daemon_command)
 
     # ── Phase 7: chat ─────────────────────────────────────────────────────────
     chat_parser = subparsers.add_parser(
