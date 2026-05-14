@@ -7,7 +7,7 @@ class MachineState < Formula
   # Apple Silicon only for now; Intel support coming in a future release.
   # SHA256 is printed by the GitHub Actions release job — update after each release.
   url "https://github.com/sashreek-das/machine-state/releases/download/v#{version}/machine-state-arm64.tar.gz"
-  sha256 "294747e049a867f88cce3124d16103f04305bd149f0705919cad5d535f968e3c"
+  sha256 "ee3ff0bdfde34f2769dfd75e94386558e734a8ac9d651801d664b74ab5afc993"
 
   def install
     bin.install "machine-state-arm64" => "machine-state"
