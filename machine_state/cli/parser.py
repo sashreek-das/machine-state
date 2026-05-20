@@ -18,6 +18,12 @@ from .forecast import _forecast_command
 from .llm import _chat_command, _plan_command
 from .scheduler import _notify_command, _scheduler_command, _scheduler_daemon_command
 from .semantic import _semantic_command
+from .health import _health_command
+from .tui_cmd import _dash_command
+from .cleanup_cmd import _cleanup_command
+from .diff_cmd import _diff_command
+from .digest_cmd import _digest_command
+from .app_report_cmd import _app_report_command
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -221,6 +227,80 @@ def build_parser() -> argparse.ArgumentParser:
     forecast_parser.add_argument("--db")
     forecast_parser.set_defaults(func=_forecast_command)
 
+    # ── Phase 9: health ───────────────────────────────────────────────────────
+    health_parser = subparsers.add_parser(
+        "health", help="Show composite machine health score (Phase 9)."
+    )
+    health_parser.add_argument("--json", action="store_true", help="Output raw JSON.")
+    health_parser.add_argument("--db")
+    health_parser.set_defaults(func=_health_command)
+
+    # ── Phase 9: dash ─────────────────────────────────────────────────────────
+    dash_parser = subparsers.add_parser(
+        "dash", help="Live terminal dashboard (Phase 9)."
+    )
+    dash_parser.add_argument(
+        "--interval", type=int, default=5,
+        help="Refresh interval in seconds (default: 5).",
+    )
+    dash_parser.add_argument("--db")
+    dash_parser.set_defaults(func=_dash_command)
+
+    # ── Phase 9: cleanup ──────────────────────────────────────────────────────
+    cleanup_parser = subparsers.add_parser(
+        "cleanup", help="Find and remove reclaimable disk space (Phase 9)."
+    )
+    cleanup_parser.add_argument(
+        "--apply", action="store_true",
+        help="Delete safe items (without this flag, only a report is shown).",
+    )
+    cleanup_parser.add_argument(
+        "--dry-run", action="store_true", dest="dry_run",
+        help="Show exact paths that would be deleted without deleting them.",
+    )
+    cleanup_parser.add_argument("--json", action="store_true", help="Output raw JSON.")
+    cleanup_parser.add_argument("--db")
+    cleanup_parser.set_defaults(func=_cleanup_command)
+
+    # ── Phase 9: diff ─────────────────────────────────────────────────────────
+    diff_parser = subparsers.add_parser(
+        "diff", help="Compare machine state between two points in time (Phase 9)."
+    )
+    diff_parser.add_argument(
+        "--from", dest="from_ref", default="7 days ago",
+        help="Start time reference (e.g. '7 days ago', '2024-03-14', 'now').",
+    )
+    diff_parser.add_argument(
+        "--to", dest="to_ref", default="now",
+        help="End time reference (default: now).",
+    )
+    diff_parser.add_argument("--json", action="store_true", help="Output raw JSON.")
+    diff_parser.add_argument("--db")
+    diff_parser.set_defaults(func=_diff_command)
+
+    # ── Phase 9: digest ───────────────────────────────────────────────────────
+    digest_parser = subparsers.add_parser(
+        "digest", help="View or generate weekly machine state digest (Phase 9)."
+    )
+    digest_parser.add_argument("--week", default=None, help="Week to show, e.g. '2024-W20'.")
+    digest_parser.add_argument(
+        "--generate", action="store_true", help="Generate digest for the given week now."
+    )
+    digest_parser.add_argument(
+        "--list", action="store_true", help="List all available digest files."
+    )
+    digest_parser.add_argument("--db")
+    digest_parser.set_defaults(func=_digest_command)
+
+    # ── Phase 9: app-report ───────────────────────────────────────────────────
+    app_report_parser = subparsers.add_parser(
+        "app-report", help="Per-application behavioural profile (Phase 9)."
+    )
+    app_report_parser.add_argument("app_name", help="Application name (e.g. 'Chrome').")
+    app_report_parser.add_argument("--json", action="store_true", help="Output raw JSON.")
+    app_report_parser.add_argument("--db")
+    app_report_parser.set_defaults(func=_app_report_command)
+
     # ── hidden: scheduler daemon entry point (PyInstaller mode) ──────────────
     # Not shown in help. Invoked internally by scheduler/daemon.py when frozen.
     daemon_parser = subparsers.add_parser("_scheduler-daemon")
@@ -231,7 +311,10 @@ def build_parser() -> argparse.ArgumentParser:
     chat_parser = subparsers.add_parser(
         "chat", help="Ask a question and get a natural language answer from the LLM (Phase 7)."
     )
-    chat_parser.add_argument("query", help="Natural language question about your machine.")
+    chat_parser.add_argument(
+        "query", nargs="?", default=None,
+        help="Natural language question. Omit to open an interactive session.",
+    )
     chat_parser.add_argument(
         "--provider", default=None,
         choices=["anthropic", "openai", "gemini", "ollama"],

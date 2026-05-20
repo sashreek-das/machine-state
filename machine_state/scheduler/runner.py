@@ -22,6 +22,8 @@ from ..entity_history import record_snapshot_entities
 from ..events import detect_and_store_events
 from ..incremental import get_due_domains, record_domain_collection, build_incremental_snapshot
 from .. import memory as mem_module
+from ..health import compute_health_score
+from ..digest.generator import week_key, digest_path, generate_digest
 
 
 def _log(log_file: Any, message: str) -> None:
@@ -85,6 +87,33 @@ def run_once(config: SchedulerConfig) -> dict[str, Any]:
     except Exception:
         pass  # non-fatal
 
+    # Compute and persist composite health score
+    try:
+        recent12 = store.get_recent_snapshots(limit=12, db_path=db_path)
+        events   = store.get_events(limit=50, db_path=db_path)
+        health   = compute_health_score(recent12, events)
+        store.save_health_score(
+            ts=health["ts"],
+            score=health["score"],
+            label=health["label"],
+            components=health["components"],
+            db_path=db_path,
+        )
+    except Exception:
+        pass  # non-fatal
+
+    # Evaluate user-defined alert rules
+    try:
+        from ..alerts.loader import load_alert_rules
+        from ..alerts.evaluator import evaluate_rules
+        from ..alerts.dispatcher import dispatch_fires
+        rules = load_alert_rules()
+        if rules and recent12:
+            fires = evaluate_rules(rules, recent12[0], health["score"])
+            dispatch_fires(fires, db_path=db_path)
+    except Exception:
+        pass  # non-fatal
+
     # Record collection times for all due domains
     collected_at = snapshot.get("timestamp", datetime.now(timezone.utc).isoformat())
     for domain in due_domains:
@@ -138,6 +167,19 @@ def run_scheduler_loop(config: SchedulerConfig, stop_flag: Any = None) -> None:
                         _log(log_file, f"System memory rebuilt: {summary}")
                     except Exception as exc:
                         _log(log_file, f"System memory rebuild failed: {exc}")
+
+                # Generate weekly digest on the first cycle after a week boundary
+                current_wk = week_key()
+                if not hasattr(run_scheduler_loop, "_last_digest_wk"):
+                    run_scheduler_loop._last_digest_wk = current_wk  # type: ignore[attr-defined]
+                if current_wk != run_scheduler_loop._last_digest_wk:  # type: ignore[attr-defined]
+                    run_scheduler_loop._last_digest_wk = current_wk  # type: ignore[attr-defined]
+                    if not digest_path(current_wk).exists():
+                        try:
+                            out = generate_digest(db_path=config.db_path)
+                            _log(log_file, f"Weekly digest written: {out}")
+                        except Exception as exc:
+                            _log(log_file, f"Digest generation failed: {exc}")
             else:
                 reason = result.get("reason", "")
                 if "No domains due" not in reason:

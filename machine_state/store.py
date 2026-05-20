@@ -97,6 +97,34 @@ def initialize(db_path: str | Path | None = None) -> None:
             )
             """
         )
+        # Phase 9: composite health score persisted after each scheduler cycle
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS health_scores (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts          INTEGER NOT NULL,
+                score       INTEGER NOT NULL,
+                label       TEXT NOT NULL,
+                ram_score   INTEGER NOT NULL,
+                disk_score  INTEGER NOT NULL,
+                proc_score  INTEGER NOT NULL,
+                event_score INTEGER NOT NULL,
+                fcast_score INTEGER NOT NULL
+            )
+            """
+        )
+        # Phase 9: log of files deleted by the cleanup engine
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cleanup_log (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts         INTEGER NOT NULL,
+                path       TEXT NOT NULL,
+                category   TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL
+            )
+            """
+        )
         connection.commit()
     _initialized.add(resolved)
 
@@ -400,3 +428,111 @@ def get_last_notification_time(
             (notification_key,),
         ).fetchone()
     return row["timestamp"] if row else None
+
+
+# ── Health scores ─────────────────────────────────────────────────────────────
+
+def save_health_score(record: dict[str, Any], db_path: str | Path | None = None) -> None:
+    initialize(db_path)
+    c = record.get("components", {})
+    with _connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO health_scores
+                (ts, score, label, ram_score, disk_score, proc_score, event_score, fcast_score)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record.get("ts", 0),
+                record.get("score", 0),
+                record.get("label", ""),
+                c.get("ram", 0),
+                c.get("disk", 0),
+                c.get("process", 0),
+                c.get("events", 0),
+                c.get("forecast", 0),
+            ),
+        )
+        connection.commit()
+
+
+def get_health_scores(
+    limit: int = 10,
+    db_path: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    initialize(db_path)
+    with _connect(db_path) as connection:
+        rows = connection.execute(
+            "SELECT * FROM health_scores ORDER BY ts DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [
+        {
+            "ts": row["ts"],
+            "score": row["score"],
+            "label": row["label"],
+            "components": {
+                "ram": row["ram_score"],
+                "disk": row["disk_score"],
+                "process": row["proc_score"],
+                "events": row["event_score"],
+                "forecast": row["fcast_score"],
+            },
+        }
+        for row in rows
+    ]
+
+
+# ── Cleanup log ───────────────────────────────────────────────────────────────
+
+def log_cleanup_deletion(
+    path: str,
+    category: str,
+    size_bytes: int,
+    db_path: str | Path | None = None,
+) -> None:
+    import time as _time
+    initialize(db_path)
+    with _connect(db_path) as connection:
+        connection.execute(
+            "INSERT INTO cleanup_log (ts, path, category, size_bytes) VALUES (?, ?, ?, ?)",
+            (int(_time.time()), path, category, size_bytes),
+        )
+        connection.commit()
+
+
+def get_cleanup_log(
+    limit: int = 50,
+    db_path: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    initialize(db_path)
+    with _connect(db_path) as connection:
+        rows = connection.execute(
+            "SELECT ts, path, category, size_bytes FROM cleanup_log ORDER BY ts DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [
+        {"ts": row["ts"], "path": row["path"], "category": row["category"],
+         "size_bytes": row["size_bytes"]}
+        for row in rows
+    ]
+
+
+# ── Snapshot by time ──────────────────────────────────────────────────────────
+
+def get_snapshot_before(
+    iso_timestamp: str,
+    db_path: str | Path | None = None,
+) -> dict[str, Any] | None:
+    """Return the latest snapshot with timestamp <= iso_timestamp."""
+    initialize(db_path)
+    with _connect(db_path) as connection:
+        row = connection.execute(
+            """
+            SELECT snapshot_json FROM snapshots
+            WHERE timestamp <= ?
+            ORDER BY timestamp DESC LIMIT 1
+            """,
+            (iso_timestamp,),
+        ).fetchone()
+    return json.loads(row["snapshot_json"]) if row else None

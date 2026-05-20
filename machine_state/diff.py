@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
@@ -128,3 +129,52 @@ def compare_snapshots(current: dict[str, Any], previous: dict[str, Any] | None) 
         "applications": app_changes,
         "folders": folder_changes,
     }
+
+
+# ── Time-travel helpers ───────────────────────────────────────────────────────
+
+def _parse_ts(raw: dict[str, Any]) -> datetime:
+    try:
+        return datetime.fromisoformat(
+            str(raw.get("timestamp", "")).replace("Z", "+00:00")
+        )
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def resolve_time_ref(ref: str) -> datetime:
+    """Parse a human time reference into a UTC datetime.
+
+    Supported formats:
+      "now"               → current UTC time
+      "N days ago"        → N days before now
+      "N hours ago"       → N hours before now
+      "YYYY-MM-DD"        → midnight UTC on that date
+      ISO 8601 string     → parsed directly
+    """
+    ref = ref.strip().lower()
+    now = datetime.now(timezone.utc)
+    if ref == "now":
+        return now
+    if ref.endswith(" days ago"):
+        n = int(ref.split()[0])
+        return now - timedelta(days=n)
+    if ref.endswith(" hours ago"):
+        n = int(ref.split()[0])
+        return now - timedelta(hours=n)
+    # Try ISO parse
+    try:
+        dt = datetime.fromisoformat(ref.replace("z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise ValueError(f"Cannot parse time reference: {ref!r}")
+
+
+def find_snapshot_near(
+    target: datetime,
+    snapshots: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Return the snapshot whose timestamp is closest to target."""
+    if not snapshots:
+        return None
+    return min(snapshots, key=lambda s: abs((_parse_ts(s) - target).total_seconds()))
