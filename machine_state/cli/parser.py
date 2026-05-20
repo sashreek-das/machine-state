@@ -65,11 +65,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sched_parser.add_argument(
         "scheduler_action",
-        choices=["start", "stop", "status", "schedule", "run-once"],
+        choices=["start", "stop", "status", "schedule", "run-once", "install", "uninstall"],
         help=(
             "start: launch daemon | stop: terminate daemon | "
             "status: check if running | schedule: show domain schedules | "
-            "run-once: execute one collection cycle now"
+            "run-once: execute one collection cycle now | "
+            "install: register as a launchd LaunchAgent (auto-start on login) | "
+            "uninstall: remove the LaunchAgent"
         ),
     )
     sched_parser.add_argument("--project", action="append", default=[])

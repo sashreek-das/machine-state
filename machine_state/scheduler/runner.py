@@ -133,7 +133,7 @@ def run_scheduler_loop(config: SchedulerConfig, stop_flag: Any = None) -> None:
                     and collection_count % config.rebuild_memory_every_n_collections == 0
                 ):
                     try:
-                        all_snapshots = store.get_all_snapshots(config.db_path)
+                        all_snapshots = store.get_all_snapshots(config.db_path, limit=200)
                         summary = mem_module.rebuild_system_memory(all_snapshots, config.db_path)
                         _log(log_file, f"System memory rebuilt: {summary}")
                     except Exception as exc:

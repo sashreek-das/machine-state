@@ -9,7 +9,11 @@ from ._utils import _print_json
 
 
 def _scheduler_command(args: argparse.Namespace) -> int:
-    from ..scheduler import start_daemon, stop_daemon, get_status, SchedulerConfig
+    from ..scheduler import (
+        start_daemon, stop_daemon, get_status,
+        install_launchd, uninstall_launchd,
+        SchedulerConfig,
+    )
 
     config = SchedulerConfig(
         project_paths=args.project,
@@ -32,6 +36,10 @@ def _scheduler_command(args: argparse.Namespace) -> int:
         from ..scheduler.runner import run_once
         result = run_once(config)
         _print_json(result)
+    elif args.scheduler_action == "install":
+        _print_json(install_launchd(config))
+    elif args.scheduler_action == "uninstall":
+        _print_json(uninstall_launchd())
     return 0
 
 

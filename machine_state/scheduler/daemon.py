@@ -1,17 +1,23 @@
-"""Daemon management: start, stop, status.
+"""Daemon management: start, stop, status, launchd install/uninstall.
 
 The scheduler runs as a background Python thread within a subprocess.
-A PID file is used to track the running process.
+A PID file is used to track the running process for manual start/stop.
 
-Start:  forks a new process running the scheduler loop
-Stop:   sends SIGTERM to the tracked PID
-Status: checks whether the PID is still alive
+For persistent, login-time auto-start use install_launchd/uninstall_launchd,
+which register a LaunchAgent plist that macOS supervises natively.
+
+Start:     forks a new process running the scheduler loop
+Stop:      sends SIGTERM to the tracked PID
+Status:    checks whether the PID is still alive
+Install:   writes ~/Library/LaunchAgents plist + launchctl load
+Uninstall: launchctl unload + removes plist
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -20,6 +26,11 @@ from pathlib import Path
 from typing import Any
 
 from .config import SchedulerConfig
+
+_LAUNCHD_LABEL = "com.machinestate.scheduler"
+_LAUNCHD_PLIST = (
+    Path.home() / "Library" / "LaunchAgents" / f"{_LAUNCHD_LABEL}.plist"
+)
 
 
 def _read_pid(pid_file: Path) -> int | None:
@@ -194,4 +205,112 @@ def get_status(config: SchedulerConfig) -> dict[str, Any]:
         "logFile": str(config.log_file),
         "message": f"Scheduler is running (PID {pid}).",
         "checkedAt": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def install_launchd(config: SchedulerConfig) -> dict[str, Any]:
+    """Install a launchd LaunchAgent for persistent, login-time scheduling.
+
+    Writes a plist to ~/Library/LaunchAgents and loads it via launchctl.
+    launchd owns the process lifecycle: it starts the scheduler on login
+    and restarts it automatically if the process exits.
+    """
+    binary = shutil.which("machine-state")
+    if binary is None:
+        return {
+            "status": "error",
+            "message": (
+                "machine-state binary not found on PATH. "
+                "Install via pip or brew and ensure the bin directory is on PATH."
+            ),
+        }
+
+    config_json = json.dumps(config.to_dict())
+    log_path = str(config.log_file)
+
+    # Escape config_json for embedding in XML: & < > " are the only characters
+    # that appear in plist string content and require escaping.
+    def _xml_escape(s: str) -> str:
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+    escaped_binary = _xml_escape(binary)
+    escaped_config = _xml_escape(config_json)
+    escaped_log = _xml_escape(log_path)
+
+    plist_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"'
+        ' "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+        '<plist version="1.0">\n'
+        "<dict>\n"
+        f"    <key>Label</key><string>{_LAUNCHD_LABEL}</string>\n"
+        "    <key>ProgramArguments</key>\n"
+        "    <array>\n"
+        f"        <string>{escaped_binary}</string>\n"
+        "        <string>_scheduler-daemon</string>\n"
+        f"        <string>{escaped_config}</string>\n"
+        "    </array>\n"
+        "    <key>RunAtLoad</key><true/>\n"
+        "    <key>KeepAlive</key><true/>\n"
+        f"    <key>StandardOutPath</key><string>{escaped_log}</string>\n"
+        f"    <key>StandardErrorPath</key><string>{escaped_log}</string>\n"
+        "</dict>\n"
+        "</plist>\n"
+    )
+
+    # Unload any existing instance before overwriting the plist.
+    if _LAUNCHD_PLIST.exists():
+        subprocess.run(
+            ["launchctl", "unload", str(_LAUNCHD_PLIST)],
+            capture_output=True,
+        )
+
+    _LAUNCHD_PLIST.parent.mkdir(parents=True, exist_ok=True)
+    _LAUNCHD_PLIST.write_text(plist_xml, encoding="utf-8")
+
+    result = subprocess.run(
+        ["launchctl", "load", str(_LAUNCHD_PLIST)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return {
+            "status": "error",
+            "message": f"launchctl load failed: {result.stderr.strip()}",
+            "plistPath": str(_LAUNCHD_PLIST),
+        }
+
+    return {
+        "status": "installed",
+        "label": _LAUNCHD_LABEL,
+        "plistPath": str(_LAUNCHD_PLIST),
+        "logFile": log_path,
+        "message": (
+            f"Scheduler installed as LaunchAgent '{_LAUNCHD_LABEL}'. "
+            "Starts on login and restarts automatically on crash."
+        ),
+    }
+
+
+def uninstall_launchd() -> dict[str, Any]:
+    """Remove the launchd LaunchAgent plist and stop the managed process."""
+    if not _LAUNCHD_PLIST.exists():
+        return {
+            "status": "not_installed",
+            "message": "No LaunchAgent plist found. Scheduler was not installed via launchd.",
+        }
+
+    subprocess.run(
+        ["launchctl", "unload", str(_LAUNCHD_PLIST)],
+        capture_output=True,
+    )
+    _LAUNCHD_PLIST.unlink()
+
+    return {
+        "status": "uninstalled",
+        "label": _LAUNCHD_LABEL,
+        "message": (
+            f"LaunchAgent '{_LAUNCHD_LABEL}' removed. "
+            "Scheduler will no longer start on login."
+        ),
     }

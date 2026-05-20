@@ -87,11 +87,15 @@ machine-state forecast install --size-gb 50   # simulate installing a 50 GB app
 ### Scheduler
 
 ```bash
+machine-state scheduler install     # register as a LaunchAgent (auto-start on login, restart on crash)
+machine-state scheduler uninstall   # remove the LaunchAgent
 machine-state scheduler status
 machine-state scheduler stop
 machine-state scheduler start
 machine-state scheduler run-once    # immediate one-shot collection
 ```
+
+> **Non-homebrew installs:** run `machine-state scheduler install` once after installation. The homebrew formula runs this automatically.
 
 ### Manual data collection
 

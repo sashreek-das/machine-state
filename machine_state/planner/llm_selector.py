@@ -26,13 +26,10 @@ if TYPE_CHECKING:
 # ── Prompt construction ────────────────────────────────────────────────────────
 
 def _build_tool_listing() -> str:
-    lines: list[str] = []
-    for name, tool in TOOL_REGISTRY.items():
-        lines.append(f"- {name}: {tool.description}")
-        for param_name, spec in tool.schema.parameters.items():
-            req = "required" if spec.required else f"optional, default={spec.default!r}"
-            lines.append(f"    {param_name} ({spec.type}, {req}): {spec.description}")
-    return "\n".join(lines)
+    return "\n".join(
+        f"- {name}: {tool.description}"
+        for name, tool in TOOL_REGISTRY.items()
+    )
 
 
 _TOOL_LISTING: str = _build_tool_listing()
@@ -46,7 +43,7 @@ _KNOWN_INTENTS: str = (
 
 _SYSTEM_PROMPT = (
     "You are a precise tool-selection assistant for a macOS machine state monitor. "
-    "Respond only with the JSON object as instructed. No prose, no markdown."
+    "Respond only with the JSON object as instructed. No prose, no markdown, no thinking."
 )
 
 

@@ -145,9 +145,18 @@ def get_recent_snapshots(limit: int = 2, db_path: str | Path | None = None) -> l
     return [json.loads(row["snapshot_json"]) for row in rows]
 
 
-def get_all_snapshots(db_path: str | Path | None = None) -> list[dict[str, Any]]:
+def get_all_snapshots(
+    db_path: str | Path | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
     initialize(db_path)
     with _connect(db_path) as connection:
+        if limit is not None:
+            rows = connection.execute(
+                "SELECT snapshot_json FROM snapshots ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [json.loads(row["snapshot_json"]) for row in reversed(rows)]
         rows = connection.execute(
             "SELECT snapshot_json FROM snapshots ORDER BY id ASC"
         ).fetchall()
