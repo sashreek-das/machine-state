@@ -1,6 +1,6 @@
 {
   "name": "machine-state-model",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "scripts": {
     "collect": "python3 -m machine_state.cli collect",

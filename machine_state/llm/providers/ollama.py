@@ -57,7 +57,7 @@ class OllamaProvider(LLMProvider):
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            with urllib.request.urlopen(req, timeout=120) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8")

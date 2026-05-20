@@ -1,13 +1,13 @@
 class MachineState < Formula
   desc "Local-first machine awareness daemon for macOS"
   homepage "https://github.com/sashreek-das/machine-state"
-  version "0.1.1"
+  version "0.1.2"
   license "MIT"
 
   # Apple Silicon only for now; Intel support coming in a future release.
   # SHA256 is printed by the GitHub Actions release job — update after each release.
   url "https://github.com/sashreek-das/machine-state/releases/download/v#{version}/machine-state-arm64.tar.gz"
-  sha256 "ffa0681501d03bc636ffca98c6dd1dba5a8c252559a9fdeb9ba6d3901f5e6784"
+  sha256 "PLACEHOLDER_UPDATE_AFTER_RELEASE"
 
   def install
     bin.install "machine-state-arm64" => "machine-state"
@@ -17,38 +17,18 @@ class MachineState < Formula
     # Runtime data directory
     (Dir.home + "/.machine-state").tap { |d| FileUtils.mkdir_p(d) }
 
-    # LaunchAgent: starts the snapshot scheduler automatically on every login.
-    launch_agents = Dir.home + "/Library/LaunchAgents"
-    FileUtils.mkdir_p(launch_agents)
-    plist = launch_agents + "/com.machine-state.scheduler.plist"
+    # v0.1.1 and earlier used a different LaunchAgent label. Unload and remove
+    # the old plist so the new one takes over cleanly on upgrade.
+    old_plist = Dir.home + "/Library/LaunchAgents/com.machine-state.scheduler.plist"
+    if File.exist?(old_plist)
+      system "launchctl", "unload", old_plist.to_s, err: :close
+      FileUtils.rm_f(old_plist)
+    end
 
-    File.write(plist, <<~XML)
-      <?xml version="1.0" encoding="UTF-8"?>
-      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-        "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-      <plist version="1.0">
-      <dict>
-        <key>Label</key>
-        <string>com.machine-state.scheduler</string>
-        <key>ProgramArguments</key>
-        <array>
-          <string>#{bin}/machine-state</string>
-          <string>scheduler</string>
-          <string>start</string>
-        </array>
-        <key>RunAtLoad</key>
-        <true/>
-        <key>KeepAlive</key>
-        <false/>
-        <key>StandardErrorPath</key>
-        <string>#{Dir.home}/.machine-state/scheduler.log</string>
-      </dict>
-      </plist>
-    XML
-
-    # Reload: unload first to handle upgrades cleanly, then load.
-    system "launchctl", "unload", plist.to_s, err: :close
-    system "launchctl", "load", plist.to_s
+    # Delegate LaunchAgent setup to the binary itself.
+    # This writes ~/Library/LaunchAgents/com.machinestate.scheduler.plist,
+    # sets KeepAlive: true (auto-restart on crash), and loads it via launchctl.
+    system "#{bin}/machine-state", "scheduler", "install"
   end
 
   test do
