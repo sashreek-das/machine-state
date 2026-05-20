@@ -1,7 +1,7 @@
 class MachineState < Formula
   desc "Local-first machine awareness daemon for macOS"
   homepage "https://github.com/sashreek-das/machine-state"
-  version "0.1.2"
+  version "0.1.3"
   license "MIT"
 
   # Apple Silicon only for now; Intel support coming in a future release.
